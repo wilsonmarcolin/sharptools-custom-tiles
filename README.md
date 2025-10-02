@@ -147,7 +147,7 @@ This project is licensed under the [MIT License](LICENSE) - see the LICENSE file
 | [UPS Information](./tiles/ups-info/) | v2.2 | UPS information using NUT server | ✅ Stable |
 | [UPS Information Mini](./tiles/ups-info-mini/) | v2.2 | UPS information using NUT server, reduced version | ✅ Stable |
 | [Weather Information](./tiles/weather-info/) | v3.0 | Evolution of OpenWeather community Custom Tile with more sources and templates | ✅ Stable |
-| [Strava for Cyclists | Strava information and bicycle maintenance management | 📝 Planned |
+| Strava for Cyclists | Strava information and bicycle maintenance management | 📝 Planned |
 
 **Status Legend**:
 - ✅ Stable - Tested and working
