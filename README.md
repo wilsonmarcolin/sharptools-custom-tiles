@@ -136,16 +136,17 @@ This project is licensed under the [MIT License](LICENSE) - see the LICENSE file
 
 ## ⭐ Available Tiles
 
-| Tile | Description | Status |
-|------|-------------|--------|
-| AC Control v5.3 | Thermostat for air conditioning control (cooling only) | ✅ Stable |
-| HT v1.3 | Humidity and temperature, with visual indicators of unsuitable conditions | ✅ Stable |
-| SpeedTest v2.3 | Speed meter with Ookla SpeedTest, with up to 3 pieces of information | ✅ Stable |
-| SpeedTest v1.1 Mini | Speed meter with Ookla SpeedTest, reduced version | ✅ Stable |
-| Sun and Moon v1.2 | Moon phase, sun position, and solar information | ✅ Stable |
-| UPS Information v2.2 | UPS information using NUT server | ✅ Stable |
-| UPS Information v2.2 Mini | UPS information using NUT server, reduced version | ✅ Stable |
-| Weather Information | Evolution of the OpenWeather community's Custom Tile, with more sources of information and templates | ✅ Stable |
+| Tile | Version | Description | Status |
+|------|---------|-------------|--------|
+| [AC Control](./tiles/ac-control/) | v5.3 | Thermostat for air conditioning control (cooling only) | ✅ Stable |
+| [HT Sensor](./tiles/ht-sensor/) | v1.3 | Humidity and temperature with visual indicators of unsuitable conditions | ✅ Stable |
+| [Humidity Comparison](./tiles/humidity-comparison/) | v2.1 | Humidity comparison and monitoring tool | ✅ Stable |
+| [SpeedTest](./tiles/speedtest/) | v2.3 | Speed meter with Ookla SpeedTest, with up to 3 pieces of information | ✅ Stable |
+| [SpeedTest Mini](./tiles/speedtest-mini/) | v1.1 | Speed meter with Ookla SpeedTest, reduced version | ✅ Stable |
+| [Sun and Moon](./tiles/sun-moon/) | v1.2 | Moon phase, sun position, and solar information | ✅ Stable |
+| [UPS Information](./tiles/ups-info/) | v2.2 | UPS information using NUT server | ✅ Stable |
+| [UPS Information Mini](./tiles/ups-info-mini/) | v2.2 | UPS information using NUT server, reduced version | ✅ Stable |
+| [Weather Information](./tiles/weather-info/) | v3.0 | Evolution of OpenWeather community Custom Tile with more sources and templates | ✅ Stable |
 | [Strava for Cyclists | Strava information and bicycle maintenance management | 📝 Planned |
 
 **Status Legend**:
