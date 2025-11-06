@@ -1,0 +1,1513 @@
+<!--
+╔════════════════════════════════════════════════════════════════════════════╗
+║                      AC CONTROL TILE v7.1 - RESPONSIVE                     ║
+║                          Production Ready                                  ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║                                                                            ║
+║  VERSION 7.1 - RESPONSIVE & FIXES:                                         ║
+║  • FIX: Ícones corretos do sensor de contato (open/closed)                 ║
+║  • FIX: Botões laterais afastados 120px do gauge                           ║
+║  • FIX: Centralização vertical corrigida                                   ║
+║  • FIX: Operating state substitui OFF/snowflake no power slider            ║
+║  • NEW: Responsive design para mobile e desktop                            ║
+║  • NEW: Sensores dobram de tamanho em desktop                              ║
+║  • NEW: Gauge ajustado automaticamente por tela                            ║
+║                                                                            ║
+║  AUTHORS: Wilson Marcolin & Claude.AI                                      ║
+║  LICENSE: MIT License                                                      ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+-->
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>AC Control v7.1</title>
+
+  <script type="application/json" id="tile-settings">
+  {
+    "schema": "0.2.0",
+    "settings": [
+      {
+        "type": "THING",
+        "name": "acDevice",
+        "label": "Air Conditioner Device",
+        "filters": ["thermostat"]
+      },
+      {
+        "type": "VARIABLE",
+        "name": "fanVariable",
+        "label": "Fan Mode Variable (REQUIRED)",
+        "filters": {"type": "String"}
+      },
+      {
+        "type": "THING",
+        "name": "tempSensor",
+        "label": "Temperature Sensor (Optional)",
+        "filters": ["temperatureMeasurement"]
+      },
+      {
+        "type": "THING",
+        "name": "contactSensor",
+        "label": "Contact Sensor (Optional)",
+        "filters": ["contactSensor"]
+      },
+      {
+        "type": "NUMBER",
+        "name": "minTemp",
+        "label": "Minimum Temperature",
+        "default": 18
+      },
+      {
+        "type": "NUMBER",
+        "name": "maxTemp",
+        "label": "Maximum Temperature",
+        "default": 26
+      },
+      {
+        "type": "BOOLEAN",
+        "name": "fanOn",
+        "label": "Fan: ON",
+        "default": false
+      },
+      {
+        "type": "BOOLEAN",
+        "name": "fanLow",
+        "label": "Fan: LOW",
+        "default": true
+      },
+      {
+        "type": "BOOLEAN",
+        "name": "fanMedium",
+        "label": "Fan: MEDIUM",
+        "default": true
+      },
+      {
+        "type": "BOOLEAN",
+        "name": "fanHigh",
+        "label": "Fan: HIGH",
+        "default": true
+      },
+      {
+        "type": "BOOLEAN",
+        "name": "fanAuto",
+        "label": "Fan: AUTO",
+        "default": false
+      },
+      {
+        "type": "STRING",
+        "name": "activeColor",
+        "label": "Active Color (hex optional)",
+        "default": "#2F2F4F"
+      }
+    ],
+    "name": "AC Control v7.1"
+  }
+  </script>
+
+  <script src="https://cdn.sharptools.io/js/custom-tiles/0.2.1/stio.js"></script>
+
+  <style>
+  /* ============================================
+     RESET & BASE
+     ============================================ */
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+
+  /* ============================================
+     CSS VARIABLES - RESPONSIVE SYSTEM
+     ============================================ */
+  :root {
+    --base-size: 1;
+    --gauge-size: calc(200px * var(--base-size));
+    --gauge-stroke: calc(20px * var(--base-size));
+    --button-size: calc(48px * var(--base-size));
+    --slider-height: calc(42px * var(--base-size));
+    --slider-width: calc(104px * var(--base-size));
+    --sensor-size: calc(22px * var(--base-size));
+    
+    --color-active: #2F2F4F;
+    --color-secondary: #4A90E2;
+    --color-surface: #ffffff;
+    --color-text: #000000;
+    --color-border: rgba(128, 128, 128, 0.3);
+    --color-gauge-track: rgba(255, 255, 255, 0.3);
+    
+    --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-slow: 350ms cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-gauge: 500ms cubic-bezier(0.4, 0, 0.2, 1);
+    
+    --radius-base: 4px;
+    --radius-lg: 21px;
+    --radius-full: 50%;
+  }
+
+  /* MOBILE: Reduz tudo pela metade */
+  @media screen and (max-width: 480px), (max-height: 480px) {
+    :root {
+      --base-size: 0.5;
+      --gauge-stroke: calc(30px * var(--base-size));
+      --sensor-size: calc(30px * var(--base-size));
+    }
+  }
+
+  /* DESKTOP: Dobra sensores e aumenta componentes */
+  @media screen and (min-width: 768px) {
+    :root {
+      --base-size: 1.15;
+      --sensor-size: calc(44px * var(--base-size));
+    }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-surface: #1a1a1a;
+      --color-text: #ffffff;
+      --color-border: rgba(255, 255, 255, 0.2);
+    }
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background-color: transparent;
+    touch-action: none;
+  }
+
+  /* ============================================
+     CONTAINER
+     ============================================ */
+  .ac-container {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 10px;
+    position: relative;
+    transition: background-color var(--transition-slow), color var(--transition-slow);
+    background-color: transparent;
+    color: var(--color-text);
+  }
+
+  .ac-container.is-on {
+    background-color: var(--color-active);
+    color: var(--color-surface);
+  }
+  
+  .content-wrapper {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 0;
+    position: relative;
+  }
+
+  /* ============================================
+     EXTERNAL SENSORS
+     ============================================ */
+  .sensors-row {
+    position: absolute;
+    top: 0px;
+    left: 0px;
+    right: 0px;
+    display: flex;
+    justify-content: space-between;
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  @media screen and (min-width: 768px) {
+    .sensors-row {
+      top: 10px;     /* Desktop: mais abaixo */
+      left: 10px;    /* Desktop: mais centralizado */
+      right: 10px;   /* Desktop: mais centralizado */
+    }
+  }
+
+  @media screen and (max-width: 480px), (max-height: 480px) {
+    .sensors-row {
+      top: 3px;      /* Mobile: subir */
+      left: 10px;     /* Mobile: mais nas bordas */
+      right: 10px;    /* Mobile: mais nas bordas */
+    }
+  }
+    
+  .sensor-badge {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: calc(2px * var(--base-size)) calc(6px * var(--base-size));
+    background-color: rgba(255, 255, 255, 0.95);
+    border-radius: calc(8px * var(--base-size));
+    font-size: calc(1.5rem * var(--base-size));
+    min-width: calc(90px * var(--base-size));
+  }
+
+  @media screen and (min-width: 768px) {
+    .sensor-badge {
+      font-size: calc(2rem * var(--base-size));  /* Desktop: dobra o texto do sensor */
+      min-width: calc(100px * var(--base-size));
+    }
+  }
+    
+  .sensor-badge.visible {
+    display: flex;
+  }
+
+  .sensor-icon {
+    fill: currentColor;
+    opacity: 0.8;
+    width: var(--sensor-size);
+    height: var(--sensor-size);
+    transition: opacity var(--transition-fast);
+  }
+  
+  .sensor-icon.open {
+    display: block;
+  }
+  
+  .sensor-icon.closed {
+    display: none;
+  }
+  
+  .sensor-badge.closed .sensor-icon.open {
+    display: none;
+  }
+  
+  .sensor-badge.closed .sensor-icon.closed {
+    display: block;
+    opacity: 1;
+  }
+
+  .ac-container.is-on .sensor-badge {
+    background-color: rgba(255, 255, 255, 0.2);
+    color: var(--color-surface);
+  }
+
+  /* ============================================
+     MAIN LAYOUT
+     ============================================ */
+  .main-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-top: calc(10px * var(--base-size));
+  }
+
+  @media screen and (min-width: 768px) {
+    .main-controls {
+      margin-top: calc(80px * var(--base-size));
+    }
+  }
+
+  .temp-btn-column {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: calc(8px * var(--base-size));
+  }
+
+  .temp-btn-column.left {
+    margin-right: calc(-10px * var(--base-size));
+  }
+
+  .temp-btn-column.right {
+    margin-left: calc(-10px * var(--base-size));
+  }
+
+  .gauge-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    max-width: calc(300px * var(--base-size));
+  }
+
+  .bottom-row {
+    display: flex;
+    flex-direction: column;
+    gap: calc(3px * var(--base-size));
+    margin-top: calc(8px * var(--base-size));
+  }
+
+  /* ============================================
+     GAUGE
+     ============================================ */
+  .gauge-wrapper {
+    position: relative;
+    width: var(--gauge-size);
+    height: var(--gauge-size);
+  }
+
+  .gauge-svg {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+  }
+
+  .gauge-track,
+  .gauge-progress {
+    fill: none;
+    stroke-width: var(--gauge-stroke);
+    stroke-linecap: round;
+  }
+
+  .gauge-track {
+    stroke: var(--color-gauge-track);
+  }
+
+  .gauge-progress {
+    stroke: var(--color-secondary);
+    transition: stroke-dashoffset var(--transition-gauge);
+  }
+
+  .ac-container.is-on .gauge-track {
+    stroke: rgba(255, 255, 255, 0.3);
+  }
+
+  .gauge-center {
+    position: absolute;
+    top: 60%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    color: var(--color-surface);
+  }
+
+  .mode-label {
+    font-size: calc(0.75rem * var(--base-size));
+    font-weight: 400;
+    opacity: 0.7;
+    text-transform: uppercase;
+  }
+
+  .temp-display {
+    font-size: calc(2.25rem * var(--base-size));
+    font-weight: 400;
+    line-height: 1;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+
+  .temp-unit {
+    font-size: 0.5em;
+    margin-left: 2px;
+    margin-top: 0.1em;
+    opacity: 0.7;
+  }
+
+  /* ============================================
+     BUTTONS
+     ============================================ */
+  .btn {
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border: none;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn:active {
+    transform: scale(0.95);
+  }
+
+  .temp-btn {
+    width: var(--button-size);
+    height: var(--button-size);
+    border-radius: var(--radius-full);
+    border: calc(2px * var(--base-size)) solid var(--color-border);
+    background-color: var(--color-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .temp-btn svg {
+    width: calc(24px * var(--base-size));
+    height: calc(24px * var(--base-size));
+    fill: var(--color-text);
+    opacity: 0.7;
+  }
+
+  .ac-container.is-on .temp-btn {
+    background-color: var(--color-secondary);
+    border-color: var(--color-secondary);
+  }
+
+  .ac-container.is-on .temp-btn svg {
+    fill: var(--color-surface);
+    opacity: 1;
+  }
+
+  /* ============================================
+     FAN BUTTONS
+     ============================================ */
+  .fan-row {
+    display: flex;
+    gap: calc(4px * var(--base-size));
+    height: var(--slider-height);
+  }
+
+  .fan-btn {
+    flex: 1;
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    border-radius: var(--radius-lg);
+    font-size: calc(18px * var(--base-size));
+    padding: 0 calc(8px * var(--base-size));
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .fan-btn.selected {
+    background-color: var(--color-secondary);
+    color: var(--color-surface);
+  }
+
+  .ac-container.is-on .fan-btn {
+    background-color: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .ac-container.is-on .fan-btn.selected {
+    background-color: var(--color-secondary);
+    color: var(--color-surface);
+  }
+
+  /* ============================================
+     POWER SLIDER
+     ============================================ */
+  .power-slider-container {
+    position: relative;
+    height: var(--slider-height);
+    margin-top: calc(8px * var(--base-size));
+    background-color: var(--color-surface);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    overflow: hidden;
+    transition: background-color var(--transition-slow);
+  }
+
+  .power-slider-container.is-on {
+    background-color: var(--color-secondary);
+  }
+
+  .power-slider-thumb {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: var(--slider-width);
+    height: var(--slider-height);
+    background-color: var(--color-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    transition: left var(--transition-slow);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    touch-action: none;
+  }
+
+  .power-slider-thumb.dragging {
+    transition: none;
+    cursor: grabbing;
+  }
+
+  .power-slider-container.is-on .power-slider-thumb {
+    left: calc(100% - var(--slider-width));
+  }
+
+  .power-slider-thumb svg {
+    width: calc(20px * var(--base-size));
+    height: calc(20px * var(--base-size));
+    fill: #000000;
+  }
+
+  .power-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: calc(18px * var(--base-size));
+    font-weight: 400;
+    pointer-events: none;
+    color: var(--color-text);
+    z-index: 1;
+    text-transform: uppercase;
+  }
+
+  .power-slider-container.is-on .power-label {
+    color: var(--color-surface);
+  }
+
+  /* ============================================
+     UNCONFIGURED STATE
+     ============================================ */
+  .unconfigured-msg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    text-align: center;
+    opacity: 0.7;
+    padding: 1rem;
+    font-size: calc(0.875rem * var(--base-size));
+  }
+
+  .hidden {
+    display: none !important;
+  }
+  </style>
+</head>
+<body>
+
+<div id="acContainer" class="ac-container">
+  <!-- Sensores Externos -->
+  <div class="sensors-row">
+    <div class="sensor-badge" id="tempSensorBadge">
+      <svg class="sensor-icon" viewBox="0 0 24 24">
+        <path d="M15 13V5A3 3 0 0 0 9 5V13A5 5 0 1 0 15 13M12 4A1 1 0 0 1 13 5V8H11V5A1 1 0 0 1 12 4Z"></path>
+      </svg>
+      <span id="tempSensorValue">--</span>
+    </div>
+    <div class="sensor-badge" id="contactSensorBadge">
+      <svg class="sensor-icon open" viewBox="0 0 24 24">
+        <path d="M12 6V9L16 5L12 1V4A8 8 0 0 0 4 12C4 13.57 4.46 15.03 5.24 16.26L6.7 14.8C6.25 13.97 6 13 6 12A6 6 0 0 1 12 6M18.76 7.74L17.3 9.2C17.74 10.04 18 11 18 12A6 6 0 0 1 12 18V15L8 19L12 23V20A8 8 0 0 0 20 12C20 10.43 19.54 8.97 18.76 7.74Z"/>
+      </svg>
+      <svg class="sensor-icon closed" viewBox="0 0 24 24">
+        <path d="M12 6V9L16 5L12 1V4C7.58 4 4 7.58 4 12C4 13.57 4.46 15.03 5.24 16.26L6.7 14.8C6.25 13.97 6 13 6 12C6 8.69 8.69 6 12 6M18.76 7.74L17.3 9.2C17.74 10.04 18 11 18 12C18 15.31 15.31 18 12 18V15L8 19L12 23V20C16.42 20 20 16.42 20 12C20 10.43 19.54 8.97 18.76 7.74M1 4.27L2.28 5.55L20.73 24L22 22.73L3.27 4L1 4.27Z"/>
+      </svg>
+      <span id="contactSensorValue"></span>
+    </div>
+  </div>
+
+  <!-- View Configurada -->
+  <div id="configuredView" class="hidden">
+    <div class="content-wrapper">
+      <div class="main-controls">
+        <div class="temp-btn-column left">
+          <button class="btn temp-btn" id="btnTempDown" type="button">
+            <svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"></path></svg>
+          </button>
+        </div>
+      
+        <div class="gauge-column">
+          <div class="gauge-wrapper">
+            <svg class="gauge-svg" viewBox="0 0 150 150">
+              <path class="gauge-track" d="M 25 125 A 58 58 0 1 1 125 125"></path>
+              <path class="gauge-progress" id="gaugeProgress" d="M 25 125 A 58 58 0 1 1 125 125"></path>
+            </svg>
+            <div class="gauge-center">
+              <div class="mode-label" id="modeLabel">Off</div>
+              <div class="temp-display">
+                <span id="tempValue">--</span>
+                <span class="temp-unit">°C</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      
+        <div class="temp-btn-column right">
+          <button class="btn temp-btn" id="btnTempUp" type="button">
+            <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"></path></svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="bottom-row">
+        <div class="fan-row" id="fanRow"></div>
+        <div class="power-slider-container" id="powerSliderContainer">
+          <div class="power-slider-thumb" id="powerSliderThumb">
+            <svg viewBox="0 0 24 24">
+              <path d="M16.56,5.44L15.11,6.89C16.84,7.94 18,9.83 18,12A6,6 0 0,1 12,18A6,6 0 0,1 6,12C6,9.83 7.16,7.94 8.88,6.88L7.44,5.44C6.06,6.88 4,9.28 4,12A8,8 0 0,0 12,20A8,8 0 0,0 20,12C20,9.28 18.64,6.88 16.56,5.44M13,3H11V13H13"></path>
+            </svg>
+          </div>
+          <span class="power-label" id="powerLabel">OFF</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- View Não Configurada -->
+  <div id="unconfiguredView" class="unconfigured-msg">
+    Please configure the AC device and Fan Mode Variable
+  </div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+
+  console.log('╔════════════════════════════════════════════════════════════╗');
+  console.log('║          AC CONTROL TILE v7.1 - INITIALIZING              ║');
+  console.log('╚════════════════════════════════════════════════════════════╝');
+
+  // ============================================
+  // CONFIGURATION
+  // ============================================
+  const config = {
+    device: null,
+    fanVariable: null,
+    tempSensor: null,
+    contactSensor: null,
+    minTemp: 18,
+    maxTemp: 26,
+    fanModes: [],
+    activeColor: '#2F2F4F',
+    isConfigured: false
+  };
+
+  // ============================================
+  // STATE
+  // ============================================
+  const state = {
+    mode: 'off',
+    setpoint: 22,
+    fanMode: 'low',
+    currentTemp: null,
+    externalTemp: null,
+    contactStatus: null,
+    operatingState: null,
+    isDragging: false
+  };
+
+  // ============================================
+  // DOM REFERENCES
+  // ============================================
+  const dom = {
+    container: null,
+    configuredView: null,
+    unconfiguredView: null,
+    
+    gaugeProgress: null,
+    modeLabel: null,
+    tempValue: null,
+    
+    btnTempUp: null,
+    btnTempDown: null,
+    fanRow: null,
+    powerSliderContainer: null,
+    powerSliderThumb: null,
+    powerLabel: null,
+    
+    tempSensorBadge: null,
+    tempSensorValue: null,
+    contactSensorBadge: null,
+    contactSensorValue: null
+  };
+
+  // ============================================
+  // UTILITY FUNCTIONS
+  // ============================================
+  const utils = {
+    clamp: (value, min, max) => Math.max(min, Math.min(max, value)),
+    
+    normalizeColor: (color) => {
+      if (!color) return '#2F2F4F';
+      color = color.trim();
+      if (color.startsWith('#')) return color;
+      return '#' + color;
+    },
+    
+    formatOperatingState: (state) => {
+      if (!state) return 'OFF';
+      const words = state.split(' ');
+      return words.map(word => 
+        word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+      ).join(' ').toUpperCase();
+    },
+    
+    log: (category, message, data) => {
+      const timestamp = new Date().toLocaleTimeString();
+      console.log(`[${timestamp}] [${category}] ${message}`, data !== undefined ? data : '');
+    }
+  };
+
+  // ============================================
+  // GAUGE CONTROL
+  // ============================================
+  const gauge = {
+    radius: 58,
+    circumference: 0,
+    arcLength: 0,
+
+    init() {
+      this.circumference = 2 * Math.PI * this.radius;
+      this.arcLength = this.circumference * 0.75;
+      
+      if (dom.gaugeProgress) {
+        dom.gaugeProgress.style.strokeDasharray = `${this.arcLength} ${this.circumference}`;
+        this.update(state.setpoint);
+      }
+      
+      utils.log('Gauge', 'Initialized', { radius: this.radius, arcLength: this.arcLength });
+    },
+
+    update(value) {
+      if (!dom.gaugeProgress) return;
+      
+      const percentage = utils.clamp(
+        (value - config.minTemp) / (config.maxTemp - config.minTemp),
+        0,
+        1
+      );
+      
+      const dashOffset = this.arcLength * (1 - percentage);
+      dom.gaugeProgress.style.strokeDashoffset = dashOffset;
+    }
+  };
+
+  // ============================================
+  // TEMPERATURE CONTROL
+  // ============================================
+  const tempControl = {
+    init() {
+      if (dom.btnTempUp) {
+        dom.btnTempUp.addEventListener('click', () => this.adjust(1));
+      }
+      if (dom.btnTempDown) {
+        dom.btnTempDown.addEventListener('click', () => this.adjust(-1));
+      }
+      utils.log('TempControl', 'Initialized');
+    },
+
+    adjust(delta) {
+      const newTemp = utils.clamp(
+        state.setpoint + delta,
+        config.minTemp,
+        config.maxTemp
+      );
+
+      if (newTemp !== state.setpoint) {
+        state.setpoint = newTemp;
+        this.updateDisplay();
+        gauge.update(newTemp);
+        deviceControl.setTemperature(newTemp);
+        utils.log('TempControl', 'Adjusted', { delta, newTemp });
+      }
+    },
+
+    updateDisplay() {
+      if (dom.tempValue) {
+        dom.tempValue.textContent = Math.round(state.setpoint);
+      }
+    }
+  };
+
+  // ============================================
+  // FAN CONTROL
+  // ============================================
+  const fanControl = {
+    init() {
+      if (!config.fanModes.length) {
+        utils.log('FanControl', 'No fan modes configured');
+        return;
+      }
+
+      this.loadFromVariable();
+      this.render();
+      this.subscribeToVariable();
+      
+      utils.log('FanControl', 'Initialized', { modes: config.fanModes });
+    },
+
+    loadFromVariable() {
+      if (!config.fanVariable) {
+        state.fanMode = this.getDefaultMode();
+        return;
+      }
+
+      try {
+        let value = config.fanVariable.value;
+        
+        if (!value && config.fanVariable.attributes?.value) {
+          value = config.fanVariable.attributes.value.value || config.fanVariable.attributes.value;
+        }
+
+        if (value && config.fanModes.includes(value)) {
+          state.fanMode = value;
+          utils.log('FanControl', 'Loaded from variable', { value });
+        } else {
+          state.fanMode = this.getDefaultMode();
+          this.saveToVariable(state.fanMode);
+        }
+      } catch (error) {
+        utils.log('FanControl', 'Error loading variable', error);
+        state.fanMode = this.getDefaultMode();
+      }
+    },
+
+    subscribeToVariable() {
+      if (!config.fanVariable) return;
+
+      try {
+        let onValue = null;
+
+        if (typeof config.fanVariable.onValue === 'function') {
+          onValue = config.fanVariable.onValue.bind(config.fanVariable);
+        } else if (config.fanVariable.attributes?.value?.onValue) {
+          onValue = config.fanVariable.attributes.value.onValue.bind(config.fanVariable.attributes.value);
+        }
+
+        if (onValue) {
+          onValue((newValue) => {
+            if (newValue && config.fanModes.includes(newValue) && state.fanMode !== newValue) {
+              state.fanMode = newValue;
+              this.updateButtons();
+              utils.log('FanControl', 'Variable changed', { newValue });
+            }
+          });
+          utils.log('FanControl', 'Subscribed to variable');
+        }
+      } catch (error) {
+        utils.log('FanControl', 'Error subscribing', error);
+      }
+    },
+
+    render() {
+      if (!dom.fanRow) return;
+
+      const labels = {
+        'on': 'On',
+        'low': 'Low',
+        'medium': 'Med',
+        'high': 'High',
+        'auto': 'Auto'
+      };
+
+      dom.fanRow.innerHTML = config.fanModes.map(mode => `
+        <button class="btn fan-btn ${state.fanMode === mode ? 'selected' : ''}" 
+                data-mode="${mode}" 
+                type="button">
+          ${labels[mode] || mode}
+        </button>
+      `).join('');
+
+      dom.fanRow.addEventListener('click', (e) => {
+        const btn = e.target.closest('.fan-btn');
+        if (!btn) return;
+
+        const mode = btn.dataset.mode;
+        if (state.fanMode !== mode) {
+          this.setMode(mode);
+        }
+      });
+    },
+
+    setMode(mode) {
+      state.fanMode = mode;
+      this.saveToVariable(mode);
+      this.updateButtons();
+      
+      if (state.mode !== 'off') {
+        deviceControl.setFanMode(mode);
+      }
+      
+      utils.log('FanControl', 'Mode set', { mode });
+    },
+
+    saveToVariable(value) {
+      if (!config.fanVariable?.setValue) return;
+
+      try {
+        config.fanVariable.setValue(value);
+        utils.log('FanControl', 'Variable saved', { value });
+      } catch (error) {
+        utils.log('FanControl', 'Error saving variable', error);
+      }
+    },
+
+    updateButtons() {
+      document.querySelectorAll('.fan-btn').forEach(btn => {
+        btn.classList.toggle('selected', btn.dataset.mode === state.fanMode);
+      });
+    },
+
+    getDefaultMode() {
+      if (config.fanModes.includes('auto')) return 'auto';
+      if (config.fanModes.includes('low')) return 'low';
+      return config.fanModes[0] || 'low';
+    },
+
+    syncOnPowerOn() {
+      if (state.mode !== 'off') {
+        deviceControl.setFanMode(state.fanMode);
+        utils.log('FanControl', 'Synced on power ON', { fanMode: state.fanMode });
+      }
+    }
+  };
+
+  // ============================================
+  // POWER CONTROL
+  // ============================================
+  const powerControl = {
+    dragState: {
+      startX: 0,
+      sliderLeft: 0,
+      maxLeft: 0
+    },
+
+    init() {
+      if (!dom.powerSliderContainer || !dom.powerSliderThumb) return;
+
+      dom.powerSliderContainer.addEventListener('click', (e) => {
+        if (!state.isDragging && e.target === dom.powerSliderContainer) {
+          this.toggle();
+        }
+      });
+
+      const handleStart = (e) => this.startDrag(e);
+      const handleMove = (e) => this.drag(e);
+      const handleEnd = (e) => this.endDrag(e);
+
+      dom.powerSliderThumb.addEventListener('touchstart', handleStart, { passive: false });
+      document.addEventListener('touchmove', handleMove, { passive: false });
+      document.addEventListener('touchend', handleEnd, { passive: false });
+      
+      dom.powerSliderThumb.addEventListener('mousedown', handleStart);
+      document.addEventListener('mousemove', handleMove);
+      document.addEventListener('mouseup', handleEnd);
+
+      utils.log('PowerControl', 'Initialized');
+    },
+
+    startDrag(e) {
+      state.isDragging = true;
+      
+      this.dragState.maxLeft = dom.powerSliderContainer.offsetWidth - dom.powerSliderThumb.offsetWidth;
+      this.dragState.startX = e.touches ? e.touches[0].clientX : e.clientX;
+      this.dragState.sliderLeft = parseInt(window.getComputedStyle(dom.powerSliderThumb).left) || 0;
+      
+      dom.powerSliderThumb.classList.add('dragging');
+      
+      e.preventDefault();
+      e.stopPropagation();
+    },
+
+    drag(e) {
+      if (!state.isDragging) return;
+
+      const currentX = e.touches ? e.touches[0].clientX : e.clientX;
+      const diff = currentX - this.dragState.startX;
+      const newLeft = utils.clamp(
+        this.dragState.sliderLeft + diff,
+        0,
+        this.dragState.maxLeft
+      );
+
+      dom.powerSliderThumb.style.left = `${newLeft}px`;
+      
+      e.preventDefault();
+      e.stopPropagation();
+    },
+
+    endDrag(e) {
+      if (!state.isDragging) return;
+
+      state.isDragging = false;
+      dom.powerSliderThumb.classList.remove('dragging');
+
+      const currentLeft = parseInt(dom.powerSliderThumb.style.left) || 0;
+      const threshold = this.dragState.maxLeft / 2;
+      
+      dom.powerSliderThumb.style.left = '';
+
+      const shouldBeOn = currentLeft > threshold;
+      const isCurrentlyOff = state.mode === 'off';
+
+      if (shouldBeOn !== !isCurrentlyOff) {
+        const willTurnOn = shouldBeOn;
+        this.setPower(willTurnOn);
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+    },
+
+    toggle() {
+      const willTurnOn = state.mode === 'off';
+      this.setPower(willTurnOn);
+    },
+
+    setPower(turnOn) {
+      const newMode = turnOn ? 'cool' : 'off';
+      deviceControl.setMode(newMode);
+      
+      if (turnOn) {
+        setTimeout(() => fanControl.syncOnPowerOn(), 500);
+      }
+      
+      utils.log('PowerControl', 'Power changed', { turnOn, newMode });
+    },
+
+    update() {
+      const isOn = state.mode !== 'off';
+      
+      if (dom.powerSliderContainer) {
+        dom.powerSliderContainer.classList.toggle('is-on', isOn);
+      }
+      
+      if (dom.powerLabel) {
+        if (state.operatingState && isOn) {
+          dom.powerLabel.innerHTML = utils.formatOperatingState(state.operatingState);
+        } 
+        else if (isOn) {
+          const isDesktop = window.matchMedia('(min-width: 768px)').matches;
+          const isMobile = window.matchMedia('(max-width: 480px), (max-height: 480px)').matches;
+  
+          let snowflakeSize = '0px';  // Padrão
+          if (isDesktop) {
+            snowflakeSize = '45px';  // Desktop: dobro
+          } else if (isMobile) {
+            snowflakeSize = '20px';  // Mobile: metade
+          }
+  
+          dom.powerLabel.innerHTML = `<svg viewBox="0 0 24 24" style="width:${snowflakeSize};height:${snowflakeSize};fill:currentColor;position:relative;top:2px;"><path d="M20.79,13.95L18.46,14.57L16.46,13.44V10.56L18.46,9.43L20.79,10.05L21.31,8.12L19.54,7.65L20,5.88L18.07,6.06L17.45,7.69L15.45,8.82L13,7.38V5.12L14.71,3.41L13.29,2L12,3.29L10.71,2L9.29,3.41L11,5.12V7.38L8.5,8.82L6.5,7.69L5.92,6.06L4,5.88L4.47,7.65L2.7,8.12L3.22,10.05L5.55,9.43L7.55,10.56V13.45L5.55,14.58L3.22,13.96L2.7,15.89L4.47,16.36L4,18.12L5.93,18.64L6.55,16.31L8.55,15.18L11,16.62V18.88L9.29,20.59L10.71,22L12,20.71L13.29,22L14.7,20.59L13,18.88V16.62L15.45,15.18L17.45,16.31L18.07,18.64L20,18.12L19.53,16.36L21.3,15.89L20.79,13.95M9.5,10.56L12,9.11L14.5,10.56V13.44L12,14.89L9.5,13.44V10.56Z"/></svg>`;
+        }
+        else {
+          dom.powerLabel.textContent = 'OFF';
+        }
+      }
+    }
+  };
+
+  // ============================================
+  // EXTERNAL SENSORS
+  // ============================================
+  const sensors = {
+    init() {
+      if (config.tempSensor) {
+        this.initTempSensor();
+      }
+      
+      if (config.contactSensor) {
+        this.initContactSensor();
+      }
+      
+      utils.log('Sensors', 'Initialized');
+    },
+
+    initTempSensor() {
+      const attr = config.tempSensor.attributes?.temperature;
+      if (!attr) return;
+
+      if (attr.value !== undefined) {
+        this.updateTemp(attr.value);
+      }
+
+      if (typeof attr.onValue === 'function') {
+        attr.onValue((value) => this.updateTemp(value));
+      }
+
+      if (dom.tempSensorBadge) {
+        dom.tempSensorBadge.classList.add('visible');
+      }
+    },
+
+    initContactSensor() {
+      const attr = config.contactSensor.attributes?.contact;
+      if (!attr) return;
+
+      if (attr.value !== undefined) {
+        this.updateContact(attr.value);
+      }
+
+      if (typeof attr.onValue === 'function') {
+        attr.onValue((value) => this.updateContact(value));
+      }
+
+      if (dom.contactSensorBadge) {
+        dom.contactSensorBadge.classList.add('visible');
+      }
+    },
+
+    updateTemp(value) {
+      state.externalTemp = value;
+      if (dom.tempSensorValue) {
+        dom.tempSensorValue.textContent = value ? Math.round(value) + '°' : '--';
+      }
+    },
+
+    updateContact(value) {
+      state.contactStatus = value;
+      
+      if (dom.contactSensorBadge) {
+        const isClosed = value === 'closed';
+        dom.contactSensorBadge.classList.toggle('closed', isClosed);
+      }
+      
+      if (dom.contactSensorValue) {
+        dom.contactSensorValue.textContent = '';
+      }
+    }
+  };
+
+  // ============================================
+  // DEVICE CONTROL
+  // ============================================
+  const deviceControl = {
+    subscriptions: [],
+
+    init() {
+      if (!config.device) {
+        utils.log('DeviceControl', 'No device configured');
+        return;
+      }
+
+      this.loadInitialState();
+      this.subscribe();
+      
+      setTimeout(() => {
+        ui.update();
+        utils.log('DeviceControl', 'UI forced update after init');
+      }, 100);
+      
+      utils.log('DeviceControl', 'Initialized', { 
+        deviceId: config.device.id || config.device.name,
+        initialMode: state.mode,
+        initialSetpoint: state.setpoint
+      });
+    },
+
+    loadInitialState() {
+      const attrs = config.device.attributes;
+      if (!attrs) {
+        utils.log('DeviceControl', 'No attributes found on device');
+        return;
+      }
+
+      utils.log('DeviceControl', 'Loading initial state from device');
+
+      const modeAttr = this.findAttribute(['thermostatMode', 'mode', 'hvacMode']);
+      if (modeAttr) {
+        const modeValue = modeAttr.value || 'off';
+        state.mode = modeValue;
+        utils.log('DeviceControl', 'Initial mode loaded', { mode: state.mode });
+      }
+
+      const setpointAttr = this.findAttribute(['coolingSetpoint', 'setpoint', 'targetTemperature']);
+      if (setpointAttr) {
+        const setpointValue = setpointAttr.value;
+        if (setpointValue !== null && setpointValue !== undefined) {
+          state.setpoint = Number(setpointValue);
+        } else {
+          state.setpoint = config.minTemp;
+        }
+        utils.log('DeviceControl', 'Initial setpoint loaded', { setpoint: state.setpoint });
+      }
+
+      const tempAttr = this.findAttribute(['temperature', 'currentTemperature']);
+      if (tempAttr) {
+        state.currentTemp = tempAttr.value;
+      }
+      
+      const operatingAttr = this.findAttribute(['thermostatOperatingState']);
+      if (operatingAttr) {
+        state.operatingState = operatingAttr.value;
+        utils.log('DeviceControl', 'Initial operating state loaded', { operatingState: state.operatingState });
+      }
+      
+      utils.log('DeviceControl', 'Initial state complete', {
+        mode: state.mode,
+        setpoint: state.setpoint,
+        operatingState: state.operatingState
+      });
+    },
+
+    subscribe() {
+      const attrs = config.device.attributes;
+      if (!attrs) return;
+
+      const modeAttr = this.findAttribute(['thermostatMode', 'mode', 'hvacMode']);
+      if (modeAttr && typeof modeAttr.onValue === 'function') {
+        const sub = modeAttr.onValue((value) => {
+          if (state.mode !== value) {
+            state.mode = value || 'off';
+            ui.update();
+            utils.log('DeviceControl', 'Mode changed', { mode: state.mode });
+          }
+        });
+        this.subscriptions.push(sub);
+      }
+
+      const setpointAttr = this.findAttribute(['coolingSetpoint', 'setpoint', 'targetTemperature']);
+      if (setpointAttr && typeof setpointAttr.onValue === 'function') {
+        const sub = setpointAttr.onValue((value) => {
+          if (state.setpoint !== value) {
+            state.setpoint = value || config.minTemp;
+            tempControl.updateDisplay();
+            gauge.update(state.setpoint);
+            utils.log('DeviceControl', 'Setpoint changed', { setpoint: state.setpoint });
+          }
+        });
+        this.subscriptions.push(sub);
+      }
+
+      const tempAttr = this.findAttribute(['temperature', 'currentTemperature']);
+      if (tempAttr && typeof tempAttr.onValue === 'function') {
+        const sub = tempAttr.onValue((value) => {
+          state.currentTemp = value;
+        });
+        this.subscriptions.push(sub);
+      }
+      
+      const operatingAttr = this.findAttribute(['thermostatOperatingState']);
+      if (operatingAttr && typeof operatingAttr.onValue === 'function') {
+        const sub = operatingAttr.onValue((value) => {
+          if (state.operatingState !== value) {
+            state.operatingState = value;
+            powerControl.update();
+            utils.log('DeviceControl', 'Operating state changed', { operatingState: state.operatingState });
+          }
+        });
+        this.subscriptions.push(sub);
+      }
+
+      utils.log('DeviceControl', 'Subscribed', { count: this.subscriptions.length });
+    },
+
+    findAttribute(names) {
+      const attrs = config.device.attributes;
+      if (!attrs) return null;
+
+      for (const name of names) {
+        if (attrs[name]) {
+          return attrs[name];
+        }
+      }
+      return null;
+    },
+
+    setMode(mode) {
+      if (!config.device?.sendCommand) return;
+      
+      config.device.sendCommand('setThermostatMode', [mode]);
+      utils.log('DeviceControl', 'Set mode', { mode });
+    },
+
+    setTemperature(temp) {
+      if (!config.device?.sendCommand) return;
+      
+      config.device.sendCommand('setCoolingSetpoint', [temp]);
+      utils.log('DeviceControl', 'Set temperature', { temp });
+    },
+
+    setFanMode(mode) {
+      if (!config.device?.sendCommand) return;
+      
+      config.device.sendCommand('setThermostatFanMode', [mode]);
+      
+      if (mode === 'medium') {
+        setTimeout(() => {
+          config.device.sendCommand('setThermostatFanMode', ['mid']);
+        }, 100);
+      }
+      
+      utils.log('DeviceControl', 'Set fan mode', { mode });
+    },
+
+    destroy() {
+      this.subscriptions.forEach(sub => {
+        if (sub && typeof sub.off === 'function') {
+          sub.off();
+        }
+      });
+      this.subscriptions = [];
+    }
+  };
+
+  // ============================================
+  // UI CONTROL
+  // ============================================
+  const ui = {
+    init() {
+      gauge.init();
+      tempControl.init();
+      fanControl.init();
+      powerControl.init();
+      sensors.init();
+      
+      this.update();
+      
+      utils.log('UI', 'Initialized');
+    },
+
+    update() {
+      const isOn = state.mode !== 'off';
+
+      if (dom.container) {
+        dom.container.classList.toggle('is-on', isOn);
+      }
+
+      if (dom.modeLabel) {
+        dom.modeLabel.textContent = isOn ? 'Cool' : 'Off';
+      }
+
+      tempControl.updateDisplay();
+      gauge.update(state.setpoint);
+      powerControl.update();
+
+      utils.log('UI', 'Updated', { isOn, mode: state.mode, setpoint: state.setpoint });
+    },
+
+    showConfigured() {
+      if (dom.configuredView) {
+        dom.configuredView.classList.remove('hidden');
+      }
+      if (dom.unconfiguredView) {
+        dom.unconfiguredView.classList.add('hidden');
+      }
+    },
+
+    showUnconfigured() {
+      if (dom.configuredView) {
+        dom.configuredView.classList.add('hidden');
+      }
+      if (dom.unconfiguredView) {
+        dom.unconfiguredView.classList.remove('hidden');
+      }
+    }
+  };
+
+  // ============================================
+  // SHARPTOOLS INTEGRATION
+  // ============================================
+  const sharptools = {
+    init() {
+      if (typeof stio === 'undefined') {
+        setTimeout(() => this.init(), 200);
+        return;
+      }
+
+      try {
+        stio.ready((data) => {
+          utils.log('SharpTools', 'Ready', data);
+          this.configure(data.settings);
+        });
+      } catch (error) {
+        utils.log('SharpTools', 'Error', error);
+        ui.showUnconfigured();
+      }
+    },
+
+    configure(settings) {
+      if (!settings.acDevice) {
+        utils.log('SharpTools', 'No AC device configured');
+        ui.showUnconfigured();
+        return;
+      }
+      config.device = settings.acDevice;
+
+      if (!settings.fanVariable) {
+        utils.log('SharpTools', 'No fan variable configured');
+        ui.showUnconfigured();
+        return;
+      }
+      config.fanVariable = settings.fanVariable;
+
+      config.minTemp = settings.minTemp || 18;
+      config.maxTemp = settings.maxTemp || 26;
+
+      config.fanModes = [];
+      if (settings.fanOn) config.fanModes.push('on');
+      if (settings.fanLow) config.fanModes.push('low');
+      if (settings.fanMedium) config.fanModes.push('medium');
+      if (settings.fanHigh) config.fanModes.push('high');
+      if (settings.fanAuto) config.fanModes.push('auto');
+
+      if (config.fanModes.length === 0) {
+        config.fanModes = ['low'];
+      }
+
+      config.tempSensor = settings.tempSensor || null;
+      config.contactSensor = settings.contactSensor || null;
+
+      config.activeColor = utils.normalizeColor(settings.activeColor);
+      if (dom.container) {
+        dom.container.style.setProperty('--color-active', config.activeColor);
+      }
+
+      config.isConfigured = true;
+
+      utils.log('SharpTools', 'Configured', {
+        minTemp: config.minTemp,
+        maxTemp: config.maxTemp,
+        fanModes: config.fanModes,
+        activeColor: config.activeColor
+      });
+
+      ui.showConfigured();
+      deviceControl.init();
+      ui.init();
+    }
+  };
+
+  // ============================================
+  // APP INITIALIZATION
+  // ============================================
+  const app = {
+    init() {
+      dom.container = document.getElementById('acContainer');
+      dom.configuredView = document.getElementById('configuredView');
+      dom.unconfiguredView = document.getElementById('unconfiguredView');
+      
+      dom.gaugeProgress = document.getElementById('gaugeProgress');
+      dom.modeLabel = document.getElementById('modeLabel');
+      dom.tempValue = document.getElementById('tempValue');
+      
+      dom.btnTempUp = document.getElementById('btnTempUp');
+      dom.btnTempDown = document.getElementById('btnTempDown');
+      dom.fanRow = document.getElementById('fanRow');
+      dom.powerSliderContainer = document.getElementById('powerSliderContainer');
+      dom.powerSliderThumb = document.getElementById('powerSliderThumb');
+      dom.powerLabel = document.getElementById('powerLabel');
+      
+      dom.tempSensorBadge = document.getElementById('tempSensorBadge');
+      dom.tempSensorValue = document.getElementById('tempSensorValue');
+      dom.contactSensorBadge = document.getElementById('contactSensorBadge');
+      dom.contactSensorValue = document.getElementById('contactSensorValue');
+
+      utils.log('App', 'DOM elements cached');
+
+      sharptools.init();
+    }
+  };
+
+  // ============================================
+  // START
+  // ============================================
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => app.init());
+  } else {
+    app.init();
+  }
+
+})();
+</script>
+
+</body>
+</html>
