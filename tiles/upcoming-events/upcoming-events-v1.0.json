@@ -1,0 +1,525 @@
+<!--
+╔════════════════════════════════════════════════════════════════════════════╗
+║                    UPCOMING EVENTS TILE v1.0                                ║
+║              Multi-Calendar Agenda for SharpTools                          ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║  Lê uma string unificada (vinda do Home Assistant) com os próximos N        ║
+║  eventos de até 3 calendários, já ordenada por data, e renderiza:           ║
+║     [emoji bandeira/ícone] | ORIGEM | DATA | DESCRIÇÃO                       ║
+║                                                                            ║
+║  FORMATO ESPERADO DA VARIÁVEL:                                             ║
+║     origem|tipo|codigo|dataISO|titulo ~ origem|tipo|codigo|dataISO|titulo   ║
+║     tipo: un | country | trip | custom                                     ║
+║     codigo (country): ISO2 do país (pa, it, br, us...)                      ║
+║                                                                            ║
+║  AUTHOR: Wilson Marcolin  ·  VERSION: 1.0.0                                 ║
+╚════════════════════════════════════════════════════════════════════════════╝
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Upcoming Events v1.0</title>
+
+  <!-- Tile Settings Configuration -->
+  <script type="application/json" id="tile-settings">
+{
+  "schema": "0.2.0",
+  "settings": [
+    {
+      "type": "THING",
+      "name": "eventsThing",
+      "label": "Calendar Thing (with payload attribute)",
+      "required": true
+    },
+    {
+      "type": "STRING",
+      "name": "attrName",
+      "label": "Attribute name holding the string",
+      "default": "payload",
+      "placeholder": "payload"
+    },
+    {
+      "type": "NUMBER",
+      "name": "maxShow",
+      "label": "Number of events to display (0 = all)",
+      "default": 6
+    },
+    {
+      "type": "ENUM",
+      "name": "locale",
+      "label": "Language / Idioma",
+      "default": "pt-BR",
+      "values": [
+        {"label": "Português (pt-BR)", "value": "pt-BR"},
+        {"label": "English (en-US)", "value": "en-US"},
+        {"label": "Español (es-ES)", "value": "es-ES"}
+      ]
+    },
+    {
+      "type": "BOOLEAN",
+      "name": "showWeekday",
+      "default": true,
+      "label": "Show weekday in date"
+    },
+    {
+      "type": "BOOLEAN",
+      "name": "useGradient",
+      "default": false,
+      "label": "Use Gradient Background"
+    },
+    {
+      "type": "STRING",
+      "name": "gradientColor",
+      "label": "Gradient Base Color",
+      "default": "#3f51b5",
+      "placeholder": "#3f51b5"
+    }
+  ],
+  "name": "Upcoming Events v1.0"
+}
+</script>
+
+  <script src="https://cdn.sharptools.io/js/custom-tiles/0.2.1/stio.js"></script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    .main-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 32px 6px 6px 6px;   /* espaço p/ a label do SharpTools no topo */
+      background: transparent;
+      gap: 6px;
+    }
+    .main-container.gradient {
+      background: linear-gradient(135deg, var(--grad-start) 0%, var(--grad-end) 100%);
+    }
+
+    /* LISTA */
+    .events-list {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-right: 2px;
+    }
+
+    .event-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 6px 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      border-left: 3px solid #3f51b5;
+    }
+    .gradient .event-row {
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(10px);
+      border-left-color: rgba(255,255,255,0.6);
+    }
+
+    /* coluna 1: emoji */
+    .ev-flag {
+      font-size: 22px;
+      line-height: 1;
+      flex-shrink: 0;
+      width: 26px;
+      text-align: center;
+    }
+
+    /* coluna 2: origem */
+    .ev-origin {
+      flex-shrink: 0;
+      width: 78px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #3f51b5;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .gradient .ev-origin { color: rgba(255,255,255,0.85); }
+
+    /* coluna 3: data */
+    .ev-date {
+      flex-shrink: 0;
+      width: 88px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #1a237e;
+      line-height: 1.15;
+    }
+    .gradient .ev-date { color: #fff; }
+    .ev-date .rel {
+      display: block;
+      font-size: 8px;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+    }
+    .gradient .ev-date .rel { color: rgba(255,255,255,0.65); }
+
+    /* coluna 4: descrição */
+    .ev-title {
+      flex: 1;
+      min-width: 0;
+      font-size: 12px;
+      color: #333;
+      line-height: 1.25;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-break: break-word;
+    }
+    .gradient .ev-title { color: rgba(255,255,255,0.95); }
+
+    /* destaque para "hoje" */
+    .event-row.is-today { border-left-color: #ff9800; }
+    .event-row.is-today .ev-date { color: #ff9800; }
+
+    /* estados */
+    .loading-state, .error-state, .empty-state {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 14px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 4px solid #ddd; border-top-color: #3f51b5;
+      border-radius: 50%; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .msg { font-size: 13px; font-weight: bold; text-align: center; padding: 0 16px; }
+    .msg.err { color: #d32f2f; }
+    .msg.info { color: #888; }
+    .hidden { display: none !important; }
+
+    /* scrollbar */
+    .events-list::-webkit-scrollbar { width: 3px; }
+    .events-list::-webkit-scrollbar-track { background: transparent; }
+    .events-list::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.2); border-radius: 2px;
+    }
+
+    /* mobile */
+    @media (max-width: 480px) {
+      .ev-origin { width: 60px; font-size: 9px; }
+      .ev-date { width: 74px; font-size: 10px; }
+      .ev-title { font-size: 11px; }
+      .ev-flag { font-size: 19px; width: 22px; }
+    }
+    /* desktop */
+    @media (min-width: 768px) {
+      .main-container { padding: 40px 10px 10px 10px; gap: 8px; }
+      .ev-origin { width: 96px; font-size: 11px; }
+      .ev-date { width: 104px; font-size: 13px; }
+      .ev-title { font-size: 14px; }
+      .ev-flag { font-size: 26px; width: 32px; }
+      .event-row { padding: 8px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <div id="mainContainer" class="main-container">
+
+    <div id="loadingState" class="loading-state">
+      <div class="spinner"></div>
+      <div style="font-weight:bold;color:#3f51b5;">Loading events...</div>
+    </div>
+
+    <div id="errorState" class="error-state hidden">
+      <div class="msg err" id="errorMessage">Configuration Error</div>
+    </div>
+
+    <div id="mainContent" class="hidden">
+      <div class="events-list" id="eventsList"></div>
+    </div>
+  </div>
+
+  <script>
+  (function() {
+    'use strict';
+
+    console.log('=== Upcoming Events Tile v1.0 Starting ===');
+
+    var State = { raw: '', events: [] };
+    var Config = {
+      maxShow: 6,
+      locale: 'pt-BR',
+      showWeekday: true,
+      gradient: false,
+      gradientColor: '#3f51b5'
+    };
+    var DOM = {};
+
+    function initDOM() {
+      var ids = ['mainContainer','loadingState','errorState','mainContent',
+                 'errorMessage','eventsList'];
+      for (var i=0;i<ids.length;i++){ DOM[ids[i]] = document.getElementById(ids[i]); }
+      return DOM.mainContainer !== null;
+    }
+
+    function showView(name) {
+      DOM.loadingState.classList.toggle('hidden', name !== 'loading');
+      DOM.errorState.classList.toggle('hidden', name !== 'error');
+      DOM.mainContent.classList.toggle('hidden', name !== 'main');
+    }
+
+    function showError(msg) {
+      console.error('ERROR: ' + msg);
+      DOM.errorMessage.textContent = msg;
+      showView('error');
+    }
+
+    // ---- emoji por tipo/codigo --------------------------------------------
+    // country usa ISO2 → regional indicator symbols (🇵🇦, 🇮🇹, ...)
+    function flagFromISO(iso) {
+      if (!iso || iso.length !== 2) return '🏳️';
+      var base = 0x1F1E6;
+      var cc = iso.toUpperCase();
+      var a = base + (cc.charCodeAt(0) - 65);
+      var b = base + (cc.charCodeAt(1) - 65);
+      return String.fromCodePoint(a) + String.fromCodePoint(b);
+    }
+
+    function emojiFor(tipo, codigo) {
+      switch ((tipo||'').toLowerCase()) {
+        case 'un':      return '🇺🇳';      // bandeira ONU (internacional)
+        case 'country': return flagFromISO(codigo);
+        case 'trip':    return '✈️';       // viagem / TripIt
+        case 'custom':  return codigo || '📌';  // codigo pode trazer um emoji direto
+        default:        return '📅';
+      }
+    }
+
+    // ---- parsing da string -------------------------------------------------
+    function parseEvents(str) {
+      var out = [];
+      if (!str) return out;
+      var records = str.split('~');
+      for (var i=0;i<records.length;i++) {
+        var rec = records[i].trim();
+        if (!rec) continue;
+        var f = rec.split('|');
+        if (f.length < 5) continue;
+        out.push({
+          origem: (f[0]||'').trim(),
+          tipo:   (f[1]||'').trim(),
+          codigo: (f[2]||'').trim(),
+          iso:    (f[3]||'').trim(),
+          titulo: f.slice(4).join('|').trim()  // tolera '|' acidental no título
+        });
+      }
+      return out;
+    }
+
+    // ---- formatação de data (normalizada, formato fixo p/ todos os idiomas) ----
+    // Formato: "Ddd, Mmm DD"  ex.: "Sat, Jul 04" / "Sáb, Jul 04" / "Sáb, Jul 04"
+    // Tabelas por idioma (índice 0 = domingo / janeiro)
+    var I18N = {
+      'en-US': {
+        wd: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],
+        mo: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'],
+        today:'Today', tomorrow:'Tomorrow', past:'Past',
+        inDays:function(n){ return 'In '+n+(n===1?' day':' days'); },
+        inWeeks:function(n){ return 'In '+n+(n===1?' week':' weeks'); },
+        inMonths:function(n){ return 'In '+n+(n===1?' month':' months'); }
+      },
+      'pt-BR': {
+        wd: ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'],
+        mo: ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'],
+        today:'Hoje', tomorrow:'Amanhã', past:'Passado',
+        inDays:function(n){ return 'Em '+n+(n===1?' dia':' dias'); },
+        inWeeks:function(n){ return 'Em '+n+(n===1?' semana':' semanas'); },
+        inMonths:function(n){ return 'Em '+n+(n===1?' mês':' meses'); }
+      },
+      'es-ES': {
+        wd: ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'],
+        mo: ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'],
+        today:'Hoy', tomorrow:'Mañana', past:'Pasado',
+        inDays:function(n){ return 'En '+n+(n===1?' día':' días'); },
+        inWeeks:function(n){ return 'En '+n+(n===1?' semana':' semanas'); },
+        inMonths:function(n){ return 'En '+n+(n===1?' mes':' meses'); }
+      }
+    };
+
+    function lang() {
+      return I18N[Config.locale] || I18N['en-US'];
+    }
+
+    function parseISODate(iso) {
+      // espera AAAA-MM-DD (all-day). Cria data local sem fuso para não "voltar 1 dia".
+      var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+      if (!m) return null;
+      return new Date(parseInt(m[1],10), parseInt(m[2],10)-1, parseInt(m[3],10));
+    }
+
+    function startOfDay(d) {
+      return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    }
+
+    function relativeLabel(d) {
+      var L = lang();
+      var today = startOfDay(new Date());
+      var diff = Math.round((startOfDay(d) - today) / 86400000);
+      if (diff === 0) return L.today;
+      if (diff === 1) return L.tomorrow;
+      if (diff < 0)   return L.past;
+      if (diff < 7)   return L.inDays(diff);
+      if (diff < 30)  return L.inWeeks(Math.round(diff/7));
+      return L.inMonths(Math.round(diff/30));
+    }
+
+    function formatDate(d) {
+      // Formato fixo "Ddd, Mmm DD" em qualquer idioma (capitalização já nas tabelas)
+      var L = lang();
+      var wd = L.wd[d.getDay()];
+      var mo = L.mo[d.getMonth()];
+      var dd = ('0' + d.getDate()).slice(-2);
+      if (Config.showWeekday) return wd + ', ' + mo + ' ' + dd;
+      return mo + ' ' + dd;
+    }
+
+    // ---- render ------------------------------------------------------------
+    function render() {
+      var list = DOM.eventsList;
+      list.innerHTML = '';
+
+      var evs = State.events.slice();
+      if (Config.maxShow && Config.maxShow > 0) evs = evs.slice(0, Config.maxShow);
+
+      if (!evs.length) {
+        list.innerHTML = '<div class="empty-state"><div class="msg info">Nenhum evento próximo</div></div>';
+        return;
+      }
+
+      var todayStart = startOfDay(new Date());
+
+      for (var i=0;i<evs.length;i++) {
+        var e = evs[i];
+        var d = parseISODate(e.iso);
+        var row = document.createElement('div');
+        row.className = 'event-row';
+        if (d && startOfDay(d).getTime() === todayStart.getTime()) {
+          row.className += ' is-today';
+        }
+
+        var dateMain = d ? formatDate(d) : e.iso;
+        var dateRel  = d ? relativeLabel(d) : '';
+
+        row.innerHTML =
+          '<div class="ev-flag">' + emojiFor(e.tipo, e.codigo) + '</div>' +
+          '<div class="ev-origin">' + escapeHtml(e.origem) + '</div>' +
+          '<div class="ev-date">' + escapeHtml(dateMain) +
+            '<span class="rel">' + escapeHtml(dateRel) + '</span></div>' +
+          '<div class="ev-title">' + escapeHtml(e.titulo) + '</div>';
+
+        list.appendChild(row);
+      }
+    }
+
+    function escapeHtml(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+        .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function applyGradient() {
+      if (Config.gradient) {
+        var color = Config.gradientColor || '#3f51b5';
+        DOM.mainContainer.classList.add('gradient');
+        DOM.mainContainer.style.setProperty('--grad-start', color);
+        DOM.mainContainer.style.setProperty('--grad-end', color + '66');
+      }
+    }
+
+    function handleValue(value) {
+      State.raw = value || '';
+      State.events = parseEvents(State.raw);
+      render();
+    }
+
+    function subscribeThing(thing, attrName) {
+      if (!thing) return;
+      attrName = attrName || 'payload';
+
+      // pede ao hub para encaminhar updates desse atributo
+      try {
+        if (thing.subscribe) thing.subscribe(attrName);
+      } catch (e) {
+        console.warn('subscribe failed for ' + attrName, e);
+      }
+
+      var attr = thing.attributes ? thing.attributes[attrName] : null;
+      if (!attr) {
+        showError('Atributo "' + attrName + '" não encontrado no Thing');
+        return;
+      }
+
+      // valor inicial
+      if (attr.value != null) handleValue(attr.value);
+
+      // updates
+      var sub = attr.onValue(function(v){ handleValue(v); });
+      return sub;
+    }
+
+    function init() {
+      if (!initDOM()) { console.error('DOM init failed'); return; }
+      if (typeof stio === 'undefined') { setTimeout(init, 200); return; }
+
+      stio.ready(function(data) {
+        var s = data.settings || {};
+
+        Config.maxShow      = parseInt(s.maxShow, 10);
+        if (isNaN(Config.maxShow)) Config.maxShow = 6;
+        Config.locale       = s.locale || 'pt-BR';
+        Config.showWeekday  = s.showWeekday !== false;
+        Config.gradient     = s.useGradient === true;
+        Config.gradientColor= s.gradientColor || '#3f51b5';
+
+        if (!s.eventsThing) { showError('Missing Calendar Thing'); return; }
+
+        var attrName = s.attrName || 'payload';
+
+        applyGradient();
+        subscribeThing(s.eventsThing, attrName);
+
+        setTimeout(function(){
+          render();
+          showView('main');
+          console.log('=== Tile Ready ===');
+        }, 800);
+      });
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+  })();
+  </script>
+</body>
+</html>

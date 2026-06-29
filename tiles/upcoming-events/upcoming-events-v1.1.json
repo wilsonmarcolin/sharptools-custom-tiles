@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<!--
+╔════════════════════════════════════════════════════════════════════════════╗
+║                       UPCOMING EVENTS TILE v1.1                            ║
+║              Multi-Calendar Agenda Display for SharpTools                  ║
+║                  with Home Assistant iCal Integration                      ║
+╠════════════════════════════════════════════════════════════════════════════╣
+║                                                                            ║
+║  VERSION 1.1 CHANGELOG:                                                    ║
+║  • ADDED: Three-language localization (English, Portuguese, Spanish)       ║
+║  • ADDED: Normalized date format "Ddd, Mmm DD" identical across locales    ║
+║  • ADDED: Localized relative-time hint (In X days / Em X dias / En X dias) ║
+║  • ADDED: Two-line description with ellipsis overflow                      ║
+║  • IMPROVED: Language selected via dropdown instead of free text           ║
+║  • REMOVED: Static tile header (the native SharpTools label is used)       ║
+║                                                                            ║
+║  DESCRIPTION:                                                              ║
+║  A unified "what's coming up" tile that merges up to four calendars into   ║
+║  a single chronological agenda. It combines national holidays, inter-      ║
+║  national observances, and personal travel itineraries (TripIt) into one   ║
+║  list - something the native SharpTools calendar tile cannot do, being     ║
+║  limited to a fixed 7-day window and a single calendar. The merge, sort,   ║
+║  and trim logic runs in a Home Assistant backend; this tile focuses on     ║
+║  presentation and stays resilient to feed changes.                         ║
+║                                                                            ║
+║  KEY FEATURES:                                                             ║
+║  • Up to four merged calendars in one chronological list                   ║
+║  • Per-row flag/icon (UN flag, country flag, travel, custom)               ║
+║  • Source label, localized date, relative-time hint, description           ║
+║  • Three-language output (en-US, pt-BR, es-ES)                             ║
+║  • Configurable number of events to display                               ║
+║  • Two-line description clamp with ellipsis                                ║
+║  • "Today" emphasis with accent color                                      ║
+║  • Optional gradient background                                            ║
+║  • Automatic responsive scaling for all screen sizes                       ║
+║  • Single unified codebase - ZERO DUPLICATION                              ║
+║                                                                            ║
+║  TECHNICAL ARCHITECTURE:                                                   ║
+║  • Unified Codebase: one implementation for phone, tablet, and desktop     ║
+║  • Zero CSS Duplication: shared rules declared once; media queries only    ║
+║    override the few dimensions that scale (font sizes, widths, paddings)   ║
+║  • Dynamic Responsive Fit: auto-adapts at <=480px and >=768px breakpoints  ║
+║  • Reuse over Repetition (DRY): emoji, date, and relative-hint helpers      ║
+║    are implemented once and reused per row                                 ║
+║  • Component-Based, Modular Organization for maintainability               ║
+║  • Read-Only External Interaction: subscribes to a single Thing attribute  ║
+║    and never issues device commands                                        ║
+║  • Classic (ES5-style) JavaScript for broad device compatibility           ║
+║                                                                            ║
+║  MODULE ORGANIZATION (logical use order):                                  ║
+║  Configuration -> State -> DOM References -> Internationalization ->        ║
+║  Emoji Resolution -> Parsing -> Date Formatting -> Rendering ->             ║
+║  Subscription -> Application Controller                                     ║
+║                                                                            ║
+║  INPUT DATA CONTRACT (Thing attribute string):                            ║
+║  Records separated by " ~ " and fields by "|":                            ║
+║    source|type|code|isoDate|title ~ source|type|code|isoDate|title ~ ...   ║
+║  • source : free text shown in the source column (e.g. Panama, TripIt)     ║
+║  • type   : un | country | trip | custom  (selects the leading emoji)      ║
+║  • code   : country -> ISO-3166 alpha-2 (pa, us, it...); custom -> emoji;   ║
+║             otherwise empty                                                 ║
+║  • isoDate: YYYY-MM-DD (all-day) - used for display and ordering           ║
+║  • title  : event description (the only field allowed to contain spaces)   ║
+║                                                                            ║
+║  Example Attribute Content:                                               ║
+║  "Panama|country|pa|2026-11-03|Separation Day ~ TripIt|trip||2026-07-04|   ║
+║   Check-in: The Buenaventura ~ Internacional|un||2026-10-31|Halloween"     ║
+║                                                                            ║
+║  CONFIGURATION OPTIONS (tile settings):                                   ║
+║  • Calendar Thing ....... Thing exposing the events attribute (required)   ║
+║  • Attribute name ....... attribute holding the string (default "payload") ║
+║  • Number of events ..... rows to display; 0 = all available               ║
+║  • Language / Idioma .... pt-BR | en-US | es-ES                            ║
+║  • Show weekday ......... include the weekday in the date column           ║
+║  • Use gradient ......... enable a gradient background                     ║
+║  • Gradient base color .. base color used for the gradient                 ║
+║                                                                            ║
+║  FAILURE / DEGRADED OPERATION:                                            ║
+║  • Missing Calendar Thing ......... shows a configuration message          ║
+║  • Attribute not found ............ shows a configuration message          ║
+║  • Empty / null value ............. shows a localized "no events" message  ║
+║  • Malformed record (<5 fields) ... that record is skipped silently        ║
+║  • Unparsable date ................ raw ISO text is shown as-is            ║
+║  • Country flags on Windows ....... regional-indicator emoji may render    ║
+║    as two letters (platform limitation); all other icons are unaffected    ║
+║                                                                            ║
+║  BACKEND NOTE:                                                            ║
+║  A Home Assistant template sensor reads several iCal sensors, merges and   ║
+║  sorts events by date, trims to a maximum, and writes the delimited        ║
+║  string into a custom attribute (default "payload"). The sensor state is   ║
+║  derived from the event count plus the current date so that any change     ║
+║  forces a push update to SharpTools.                                       ║
+║                                                                            ║
+║  AUTHOR: Wilson Marcolin                                                   ║
+║  CONTRIBUTORS: Claude AI Assistant                                         ║
+║  VERSION: 1.1.0 - Multi-Language & Two-Line Descriptions                   ║
+║  RELEASE: June 2026                                                        ║
+║  LICENSE: MIT                                                              ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
+-->
+  <script type="application/json" id="tile-settings">
+    {
+      "schema": "0.2.0",
+      "name": "Upcoming Events v1.1",
+      "settings": [
+        {
+          "type": "THING",
+          "name": "eventsThing",
+          "label": "Calendar Thing (with events attribute)",
+          "required": true
+        },
+        {
+          "type": "STRING",
+          "name": "attrName",
+          "label": "Attribute name holding the string",
+          "default": "payload",
+          "placeholder": "payload"
+        },
+        {
+          "type": "NUMBER",
+          "name": "maxShow",
+          "label": "Number of events to display (0 = all)",
+          "default": 6
+        },
+        {
+          "type": "ENUM",
+          "name": "locale",
+          "label": "Language / Idioma",
+          "default": "pt-BR",
+          "values": [
+            {"label": "Português (pt-BR)", "value": "pt-BR"},
+            {"label": "English (en-US)", "value": "en-US"},
+            {"label": "Español (es-ES)", "value": "es-ES"}
+          ]
+        },
+        {
+          "type": "BOOLEAN",
+          "name": "showWeekday",
+          "default": true,
+          "label": "Show weekday in date"
+        },
+        {
+          "type": "BOOLEAN",
+          "name": "useGradient",
+          "default": false,
+          "label": "Use Gradient Background"
+        },
+        {
+          "type": "STRING",
+          "name": "gradientColor",
+          "label": "Gradient Base Color",
+          "default": "#3f51b5",
+          "placeholder": "#3f51b5"
+        }
+      ]
+    }
+  </script>
+
+  <script src="https://cdn.sharptools.io/js/custom-tiles/0.2.1/stio.js"></script>
+
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      height: 100%;
+      width: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      background: transparent;
+    }
+
+    /* Root container */
+    .main-container {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 32px 6px 6px 6px;   /* top space reserved for the SharpTools label */
+      background: transparent;
+      gap: 6px;
+    }
+    .main-container.gradient {
+      background: linear-gradient(135deg, var(--grad-start) 0%, var(--grad-end) 100%);
+    }
+
+    /* Main content wrapper: must own the available height so the inner
+       list can scroll. min-height:0 lets the flex child shrink and
+       activate overflow instead of pushing content out of view. */
+    #mainContent {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Scrollable event list */
+    .events-list {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding-right: 2px;
+    }
+
+    /* Single event row */
+    .event-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #fff;
+      border-radius: 8px;
+      padding: 6px 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+      border-left: 3px solid #3f51b5;
+    }
+    .gradient .event-row {
+      background: rgba(255,255,255,0.15);
+      backdrop-filter: blur(10px);
+      border-left-color: rgba(255,255,255,0.6);
+    }
+
+    /* Column 1: flag / icon */
+    .ev-flag {
+      font-size: 22px;
+      line-height: 1;
+      flex-shrink: 0;
+      width: 26px;
+      text-align: center;
+    }
+
+    /* Column 2: source label */
+    .ev-origin {
+      flex-shrink: 0;
+      width: 78px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #3f51b5;
+      text-transform: uppercase;
+      letter-spacing: 0.2px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .gradient .ev-origin { color: rgba(255,255,255,0.85); }
+
+    /* Column 3: date + relative hint */
+    .ev-date {
+      flex-shrink: 0;
+      width: 88px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #1a237e;
+      line-height: 1.15;
+    }
+    .gradient .ev-date { color: #fff; }
+    .ev-date .rel {
+      display: block;
+      font-size: 8px;
+      font-weight: 600;
+      color: #888;
+      text-transform: uppercase;
+    }
+    .gradient .ev-date .rel { color: rgba(255,255,255,0.65); }
+
+    /* Column 4: event description (clamped to two lines) */
+    .ev-title {
+      flex: 1;
+      min-width: 0;
+      font-size: 12px;
+      color: #333;
+      line-height: 1.25;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      word-break: break-word;
+    }
+    .gradient .ev-title { color: rgba(255,255,255,0.95); }
+
+    /* "Today" emphasis */
+    .event-row.is-today { border-left-color: #ff9800; }
+    .event-row.is-today .ev-date { color: #ff9800; }
+
+    /* Loading / error / empty states */
+    .loading-state, .error-state, .empty-state {
+      width: 100%; height: 100%;
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 14px;
+    }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 4px solid #ddd; border-top-color: #3f51b5;
+      border-radius: 50%; animation: spin 1s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .msg { font-size: 13px; font-weight: bold; text-align: center; padding: 0 16px; }
+    .msg.err { color: #d32f2f; }
+    .msg.info { color: #888; }
+    .hidden { display: none !important; }
+
+    /* Custom scrollbar */
+    .events-list::-webkit-scrollbar { width: 3px; }
+    .events-list::-webkit-scrollbar-track { background: transparent; }
+    .events-list::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.2); border-radius: 2px;
+    }
+
+    /* Responsive overrides: small screens (phones) */
+    @media (max-width: 480px) {
+      .ev-origin { width: 60px; font-size: 9px; }
+      .ev-date { width: 74px; font-size: 10px; }
+      .ev-title { font-size: 11px; }
+      .ev-flag { font-size: 19px; width: 22px; }
+    }
+
+    /* Responsive overrides: large screens (desktop) */
+    @media (min-width: 768px) {
+      .main-container { padding: 40px 10px 10px 10px; gap: 8px; }
+      .ev-origin { width: 96px; font-size: 11px; }
+      .ev-date { width: 104px; font-size: 13px; }
+      .ev-title { font-size: 14px; }
+      .ev-flag { font-size: 26px; width: 32px; }
+      .event-row { padding: 8px 12px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div id="mainContainer" class="main-container">
+
+    <div id="loadingState" class="loading-state">
+      <div class="spinner"></div>
+      <div style="font-weight:bold;color:#3f51b5;">Loading events...</div>
+    </div>
+
+    <div id="errorState" class="error-state hidden">
+      <div class="msg err" id="errorMessage">Configuration Error</div>
+    </div>
+
+    <div id="mainContent" class="hidden">
+      <div class="events-list" id="eventsList"></div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      'use strict';
+
+      // ======================================================================
+      //  Configuration Module
+      //  User-facing options resolved from the tile settings at startup.
+      // ======================================================================
+      var Config = {
+        maxShow: 6,
+        locale: 'pt-BR',
+        showWeekday: true,
+        gradient: false,
+        gradientColor: '#3f51b5'
+      };
+
+      // ======================================================================
+      //  State Module
+      //  Runtime data: the raw attribute string and the parsed event list.
+      // ======================================================================
+      var State = {
+        raw: '',
+        events: []
+      };
+
+      // ======================================================================
+      //  DOM References Module
+      //  Cached element handles, resolved once on startup.
+      // ======================================================================
+      var DOM = {};
+
+      function initDOM() {
+        var ids = [
+          'mainContainer', 'loadingState', 'errorState',
+          'mainContent', 'errorMessage', 'eventsList'
+        ];
+        for (var i = 0; i < ids.length; i++) {
+          DOM[ids[i]] = document.getElementById(ids[i]);
+        }
+        return DOM.mainContainer !== null;
+      }
+
+      // ======================================================================
+      //  Internationalization Module
+      //  Language tables drive identical date and relative-hint formatting
+      //  across locales, independent of the host browser locale.
+      //  Weekday index 0 = Sunday; month index 0 = January.
+      // ======================================================================
+      var I18N = {
+        'en-US': {
+          wd: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+          mo: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+          today: 'Today', tomorrow: 'Tomorrow', past: 'Past', empty: 'No upcoming events',
+          inDays: function (n) { return 'In ' + n + (n === 1 ? ' day' : ' days'); },
+          inWeeks: function (n) { return 'In ' + n + (n === 1 ? ' week' : ' weeks'); },
+          inMonths: function (n) { return 'In ' + n + (n === 1 ? ' month' : ' months'); }
+        },
+        'pt-BR': {
+          wd: ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'],
+          mo: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'],
+          today: 'Hoje', tomorrow: 'Amanhã', past: 'Passado', empty: 'Nenhum evento próximo',
+          inDays: function (n) { return 'Em ' + n + (n === 1 ? ' dia' : ' dias'); },
+          inWeeks: function (n) { return 'Em ' + n + (n === 1 ? ' semana' : ' semanas'); },
+          inMonths: function (n) { return 'Em ' + n + (n === 1 ? ' mês' : ' meses'); }
+        },
+        'es-ES': {
+          wd: ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'],
+          mo: ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'],
+          today: 'Hoy', tomorrow: 'Mañana', past: 'Pasado', empty: 'No hay eventos próximos',
+          inDays: function (n) { return 'En ' + n + (n === 1 ? ' día' : ' días'); },
+          inWeeks: function (n) { return 'En ' + n + (n === 1 ? ' semana' : ' semanas'); },
+          inMonths: function (n) { return 'En ' + n + (n === 1 ? ' mes' : ' meses'); }
+        }
+      };
+
+      function lang() {
+        return I18N[Config.locale] || I18N['en-US'];
+      }
+
+      // ======================================================================
+      //  Emoji Resolution Module
+      //  Maps a record's type/code to a single leading emoji.
+      //   - un      : United Nations flag (international)
+      //   - country : ISO-3166 alpha-2 -> regional-indicator flag
+      //   - trip    : airplane (travel / TripIt)
+      //   - custom  : code may carry an emoji directly
+      // ======================================================================
+      function flagFromISO(iso) {
+        if (!iso || iso.length !== 2) return '🏳️';
+        var base = 0x1F1E6;
+        var cc = iso.toUpperCase();
+        var a = base + (cc.charCodeAt(0) - 65);
+        var b = base + (cc.charCodeAt(1) - 65);
+        return String.fromCodePoint(a) + String.fromCodePoint(b);
+      }
+
+      function emojiFor(type, code) {
+        switch ((type || '').toLowerCase()) {
+          case 'un':      return '🇺🇳';
+          case 'country': return flagFromISO(code);
+          case 'trip':    return '✈️';
+          case 'custom':  return code || '📌';
+          default:        return '📅';
+        }
+      }
+
+      // ======================================================================
+      //  Parsing Module
+      //  Splits the attribute string into structured event objects.
+      //  Records: " ~ "   Fields: "|"   (title may itself contain "|")
+      // ======================================================================
+      function parseEvents(str) {
+        var out = [];
+        if (!str) return out;
+        var records = str.split('~');
+        for (var i = 0; i < records.length; i++) {
+          var rec = records[i].trim();
+          if (!rec) continue;
+          var f = rec.split('|');
+          if (f.length < 5) continue;
+          out.push({
+            origem: (f[0] || '').trim(),
+            tipo: (f[1] || '').trim(),
+            codigo: (f[2] || '').trim(),
+            iso: (f[3] || '').trim(),
+            titulo: f.slice(4).join('|').trim()
+          });
+        }
+        return out;
+      }
+
+      // ======================================================================
+      //  Date Formatting Module
+      //  Produces a fixed "Ddd, Mmm DD" layout and a localized relative hint.
+      //  All-day ISO dates are parsed as local dates to avoid timezone shift.
+      // ======================================================================
+      function parseISODate(iso) {
+        var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+        if (!m) return null;
+        return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10));
+      }
+
+      function startOfDay(d) {
+        return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      }
+
+      function relativeLabel(d) {
+        var L = lang();
+        var today = startOfDay(new Date());
+        var diff = Math.round((startOfDay(d) - today) / 86400000);
+        if (diff === 0) return L.today;
+        if (diff === 1) return L.tomorrow;
+        if (diff < 0) return L.past;
+        if (diff < 7) return L.inDays(diff);
+        if (diff < 30) return L.inWeeks(Math.round(diff / 7));
+        return L.inMonths(Math.round(diff / 30));
+      }
+
+      function formatDate(d) {
+        var L = lang();
+        var wd = L.wd[d.getDay()];
+        var mo = L.mo[d.getMonth()];
+        var dd = ('0' + d.getDate()).slice(-2);
+        if (Config.showWeekday) return wd + ', ' + mo + ' ' + dd;
+        return mo + ' ' + dd;
+      }
+
+      // ======================================================================
+      //  Rendering Module
+      //  Builds the row markup from the parsed, optionally trimmed list.
+      // ======================================================================
+      function escapeHtml(s) {
+        if (s == null) return '';
+        return String(s)
+          .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      }
+
+      function render() {
+        var list = DOM.eventsList;
+        list.innerHTML = '';
+
+        var evs = State.events.slice();
+        if (Config.maxShow && Config.maxShow > 0) evs = evs.slice(0, Config.maxShow);
+
+        if (!evs.length) {
+          list.innerHTML = '<div class="empty-state"><div class="msg info">' +
+            escapeHtml(lang().empty) + '</div></div>';
+          return;
+        }
+
+        var todayStart = startOfDay(new Date());
+
+        for (var i = 0; i < evs.length; i++) {
+          var e = evs[i];
+          var d = parseISODate(e.iso);
+          var row = document.createElement('div');
+          row.className = 'event-row';
+          if (d && startOfDay(d).getTime() === todayStart.getTime()) {
+            row.className += ' is-today';
+          }
+
+          var dateMain = d ? formatDate(d) : e.iso;
+          var dateRel = d ? relativeLabel(d) : '';
+
+          row.innerHTML =
+            '<div class="ev-flag">' + emojiFor(e.tipo, e.codigo) + '</div>' +
+            '<div class="ev-origin">' + escapeHtml(e.origem) + '</div>' +
+            '<div class="ev-date">' + escapeHtml(dateMain) +
+              '<span class="rel">' + escapeHtml(dateRel) + '</span></div>' +
+            '<div class="ev-title">' + escapeHtml(e.titulo) + '</div>';
+
+          list.appendChild(row);
+        }
+      }
+
+      // ======================================================================
+      //  Subscription Module
+      //  Binds to the Thing attribute, applies the initial value, and listens
+      //  for updates. This is the only point of contact with external data.
+      // ======================================================================
+      function handleValue(value) {
+        State.raw = value || '';
+        State.events = parseEvents(State.raw);
+        render();
+      }
+
+      function subscribeThing(thing, attrName) {
+        if (!thing) return;
+        attrName = attrName || 'payload';
+
+        if (thing.subscribe) {
+          thing.subscribe(attrName);
+        }
+
+        var attr = thing.attributes ? thing.attributes[attrName] : null;
+        if (!attr) {
+          showError('Attribute "' + attrName + '" not found on the selected Thing');
+          return;
+        }
+
+        if (attr.value != null) handleValue(attr.value);
+        return attr.onValue(function (v) { handleValue(v); });
+      }
+
+      // ======================================================================
+      //  View Helpers
+      // ======================================================================
+      function showView(name) {
+        DOM.loadingState.classList.toggle('hidden', name !== 'loading');
+        DOM.errorState.classList.toggle('hidden', name !== 'error');
+        DOM.mainContent.classList.toggle('hidden', name !== 'main');
+      }
+
+      function showError(message) {
+        DOM.errorMessage.textContent = message;
+        showView('error');
+      }
+
+      function applyGradient() {
+        if (!Config.gradient) return;
+        var color = Config.gradientColor || '#3f51b5';
+        DOM.mainContainer.classList.add('gradient');
+        DOM.mainContainer.style.setProperty('--grad-start', color);
+        DOM.mainContainer.style.setProperty('--grad-end', color + '66');
+      }
+
+      // ======================================================================
+      //  Application Controller
+      //  Startup sequence: resolve DOM, wait for stio, read settings, bind.
+      // ======================================================================
+      function init() {
+        if (!initDOM()) return;
+        if (typeof stio === 'undefined') {
+          setTimeout(init, 200);
+          return;
+        }
+
+        stio.ready(function (data) {
+          var s = data.settings || {};
+
+          Config.maxShow = parseInt(s.maxShow, 10);
+          if (isNaN(Config.maxShow)) Config.maxShow = 6;
+          Config.locale = s.locale || 'pt-BR';
+          Config.showWeekday = s.showWeekday !== false;
+          Config.gradient = s.useGradient === true;
+          Config.gradientColor = s.gradientColor || '#3f51b5';
+
+          if (!s.eventsThing) {
+            showError('Please configure the Calendar Thing');
+            return;
+          }
+
+          applyGradient();
+          subscribeThing(s.eventsThing, s.attrName || 'payload');
+
+          setTimeout(function () {
+            render();
+            showView('main');
+          }, 800);
+        });
+      }
+
+      // Bootstrap
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+      } else {
+        init();
+      }
+    })();
+  </script>
+</body>
+</html>
