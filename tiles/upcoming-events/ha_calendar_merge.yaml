@@ -1,0 +1,96 @@
+# ============================================================================
+#  CALENDÁRIO UNIFICADO → SharpTools   (v2 - com push fix)
+#  Junta até N calendários (integração tybritten/ical) numa única string,
+#  ordenada por data e cortada nos próximos N eventos.
+#
+#  CORREÇÃO v2: o `state` agora VARIA conforme o conteúdo (contagem de eventos
+#  + data do dia). Isso é essencial: o HA só envia atualização (push) ao
+#  SharpTools quando o STATE muda. Com o state fixo "ok", o payload mudava mas
+#  o SharpTools nunca era notificado. Agora qualquer mudança no conjunto de
+#  eventos altera o state e dispara o push.
+#
+#  FORMATO DE SAÍDA (atributo `payload`, consumido pelo custom tile):
+#    origem|tipo|codigo|dataISO|titulo ~ origem|tipo|codigo|dataISO|titulo ~ ...
+#    tipo: un | country | trip | custom
+#    codigo (country): ISO2 do país (pa, it, br, us...)
+#  Separadores: campo = "|"   registro = " ~ "
+# ============================================================================
+
+template:
+  - sensor:
+      - name: "Calendario Unificado"
+        unique_id: calendario_unificado_sharptools
+
+        # --------------------------------------------------------------------
+        #  STATE: assinatura curta que MUDA quando o conteúdo muda.
+        #  Conta os eventos válidos (varrendo os sensores, SEM auto-referência)
+        #  e anexa a data de hoje (garante refresh ao menos 1x/dia).
+        #  Cabe folgado nos 255 chars do state.
+        # --------------------------------------------------------------------
+        state: >
+          {% set ns = namespace(count=0) %}
+          {% set calendars = [
+            'sensor.ical_intl_event_',
+            'sensor.ical_panama_event_',
+            'sensor.ical_tripit_event_',
+            'sensor.ical_usa_event_'
+          ] %}
+          {% set max_per_cal = 10 %}
+          {% for prefix in calendars %}
+            {% for i in range(0, max_per_cal) %}
+              {% set eid = prefix ~ i %}
+              {% if states(eid) not in ['unknown','unavailable','',None]
+                    and state_attr(eid,'start') %}
+                {% set ns.count = ns.count + 1 %}
+              {% endif %}
+            {% endfor %}
+          {% endfor %}
+          {{ ns.count }}-{{ now().strftime('%Y%m%d') }}
+
+        attributes:
+          # ------------------------------------------------------------------
+          #  PAYLOAD: a string completa de eventos (sem limite de 255).
+          # ------------------------------------------------------------------
+          payload: >
+            {# ---- CONFIG: defina aqui seus calendários e metadados ---- #}
+            {% set ns = namespace(events=[]) %}
+            {% set calendars = [
+              {'prefix':'sensor.ical_intl_event_',   'origem':'Internacional', 'tipo':'un',      'codigo':''},
+              {'prefix':'sensor.ical_panama_event_', 'origem':'Panama',        'tipo':'country', 'codigo':'pa'},
+              {'prefix':'sensor.ical_tripit_event_', 'origem':'TripIt',        'tipo':'trip',    'codigo':''},
+              {'prefix':'sensor.ical_usa_event_',    'origem':'EUA',           'tipo':'country', 'codigo':'us'}
+            ] %}
+            {% set max_per_cal = 10 %}
+
+            {# ---- coleta ---- #}
+            {% for cal in calendars %}
+              {% for i in range(0, max_per_cal) %}
+                {% set eid = cal.prefix ~ i %}
+                {% if states(eid) not in ['unknown','unavailable','',None] %}
+                  {% set st = state_attr(eid,'start') %}
+                  {% if st %}
+                    {% set title = (state_attr(eid,'summary') or states(eid) or 'Evento') | string
+                                    | replace('|',' ') | replace('~','-') | replace('\n',' ') | trim %}
+                    {% set dt = as_timestamp(st) %}
+                    {% if dt %}
+                      {% set ns.events = ns.events + [{
+                        'ts': dt, 'iso': st | string, 'origem': cal.origem,
+                        'tipo': cal.tipo, 'codigo': cal.codigo, 'titulo': title
+                      }] %}
+                    {% endif %}
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+            {% endfor %}
+
+            {# ---- ordena e corta nos próximos N ---- #}
+            {% set n_show = 15 %}
+            {% set chosen = (ns.events | sort(attribute='ts'))[:n_show] %}
+
+            {# ---- monta a string ---- #}
+            {% set out = namespace(parts=[]) %}
+            {% for e in chosen %}
+              {% set rec = e.origem ~ '|' ~ e.tipo ~ '|' ~ e.codigo ~ '|' ~ e.iso[:10] ~ '|' ~ e.titulo %}
+              {% set out.parts = out.parts + [rec] %}
+            {% endfor %}
+            {{ out.parts | join(' ~ ') }}
